@@ -65,7 +65,36 @@ class ShortenerHandler(BaseHTTPRequestHandler):
         self.wfile.write(message.encode("utf-8"))
     
     def do_GET(self):
-        pass
+        short_url = self.path.strip("/")
+        if len(short_url) != 6:
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"error": "Invalid URL"}')
+            return
+
+        conn = get_db_connection()
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE urls SET click_count = click_count + 1 WHERE short_code = %s RETURNING original_url",
+                    (short_url,)
+                )
+                url = cur.fetchone()
+
+            if url is None:
+                self.send_error(404, "Not Found")
+                return
+            else:
+                conn.commit()
+                self.send_response(302)
+                self.send_header("Location", f"{url[0]}")
+                self.end_headers()
+
+        finally:
+            conn.close()
+
         
     def do_DELETE(self):
         pass
